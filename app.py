@@ -159,12 +159,20 @@ def get_lomba_yang_perlu_diingatkan():
 # --- FUNGSI DATABASE UNTUK USERS ---
 
 ROLES = [
-    "data",
-    "fullstack",
-    "uiux",
-    "blockchain",
-    "frontend"
+    "data-mle",
+    "fullstack-developer",
+    "uiux-designer",
+    "blockchain-developer",
+    "frontend-developer",
 ]
+
+ROLE_DISPLAY = {
+    "data-mle": "DATA & MLE",
+    "fullstack-developer": "FULL STACK DEVELOPER",
+    "uiux-designer": "UI/UX DESIGNER",
+    "blockchain-developer": "BLOCKCHAIN DEVELOPER",
+    "frontend-developer": "FRONT END DEVELOPER",
+}
 
 
 def get_role(user_id):
@@ -180,7 +188,8 @@ def get_role(user_id):
 
 def daftar_user(user_id, username, role):
     if role not in ROLES:
-        return False, f"Role tidak valid! Pilih salah satu: {', '.join(ROLES)}"
+        role_list = "\n".join(f"• `{k}` — {v}" for k, v in ROLE_DISPLAY.items())
+        return False, f"Role tidak valid!\n\nPilih salah satu:\n{role_list}"
 
     conn = sqlite3.connect(DATABASE)
     try:
@@ -188,7 +197,7 @@ def daftar_user(user_id, username, role):
         cursor.execute("SELECT role FROM users WHERE user_id = ?", (user_id,))
         existing = cursor.fetchone()
         if existing:
-            return False, f"Anda sudah terdaftar sebagai *{existing[0]}*. Gunakan `/ubahrole [role]` jika ingin mengganti."
+            return False, f"Anda sudah terdaftar sebagai *{ROLE_DISPLAY.get(existing[0], existing[0])}*. Gunakan `/ubahrole [role]` jika ingin mengganti."
 
         now = datetime.now(WIB).isoformat()
         cursor.execute(
@@ -196,14 +205,15 @@ def daftar_user(user_id, username, role):
             (user_id, username, role, now)
         )
         conn.commit()
-        return True, f"✅ Berhasil terdaftar sebagai *{role}*!"
+        return True, f"✅ Berhasil terdaftar sebagai *{ROLE_DISPLAY.get(role, role)}*!"
     finally:
         conn.close()
 
 
 def ubah_role(user_id, role):
     if role not in ROLES:
-        return False, f"Role tidak valid! Pilih salah satu: {', '.join(ROLES)}"
+        role_list = "\n".join(f"• `{k}` — {v}" for k, v in ROLE_DISPLAY.items())
+        return False, f"Role tidak valid!\n\nPilih salah satu:\n{role_list}"
 
     conn = sqlite3.connect(DATABASE)
     try:
@@ -214,7 +224,7 @@ def ubah_role(user_id, role):
 
         cursor.execute("UPDATE users SET role = ? WHERE user_id = ?", (role, user_id))
         conn.commit()
-        return True, f"✅ Role berhasil diubah menjadi *{role}*!"
+        return True, f"✅ Role berhasil diubah menjadi *{ROLE_DISPLAY.get(role, role)}*!"
     finally:
         conn.close()
 
@@ -253,7 +263,12 @@ Bot ini membantu tim mengelola lomba dan registrasi role anggota.
 /start - Pesan ini
 /help - Panduan lengkap
 
-*Role tersedia:* data, fullstack, uiux, blockchain, frontend
+*Role tersedia:*
+• `data-mle` — DATA & MLE
+• `fullstack-developer` — FULL STACK DEVELOPER
+• `uiux-designer` — UI/UX DESIGNER
+• `blockchain-developer` — BLOCKCHAIN DEVELOPER
+• `frontend-developer` — FRONT END DEVELOPER
 
 Tim Oryphem 🧡
     """
@@ -475,12 +490,12 @@ async def batal(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def daftar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
-        role_list = "\n".join(f"• `{r}`" for r in ROLES)
+        role_list = "\n".join(f"• `{k}` — {v}" for k, v in ROLE_DISPLAY.items())
         await update.message.reply_text(
             f"❌ *Format salah!*\n\n"
             f"Gunakan: `/daftar [role]`\n\n"
             f"Role tersedia:\n{role_list}\n\n"
-            f"Contoh: `/daftar data`",
+            f"Contoh: `/daftar data-mle`",
             parse_mode="Markdown"
         )
         return
@@ -495,12 +510,12 @@ async def daftar(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def ubahrole(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
-        role_list = "\n".join(f"• `{r}`" for r in ROLES)
+        role_list = "\n".join(f"• `{k}` — {v}" for k, v in ROLE_DISPLAY.items())
         await update.message.reply_text(
             f"❌ *Format salah!*\n\n"
             f"Gunakan: `/ubahrole [role]`\n\n"
             f"Role tersedia:\n{role_list}\n\n"
-            f"Contoh: `/ubahrole fullstack`",
+            f"Contoh: `/ubahrole fullstack-developer`",
             parse_mode="Markdown"
         )
         return
@@ -518,12 +533,12 @@ async def role(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if role_user:
         await update.message.reply_text(
-            f"🧑‍💻 *Role Anda:* {role_user}\n\n"
+            f"🧑‍💻 *Role Anda:* {ROLE_DISPLAY.get(role_user, role_user)}\n\n"
             f"Gunakan `/ubahrole [role]` jika ingin mengganti.",
             parse_mode="Markdown"
         )
     else:
-        role_list = "\n".join(f"• `{r}`" for r in ROLES)
+        role_list = "\n".join(f"• `{k}` — {v}" for k, v in ROLE_DISPLAY.items())
         await update.message.reply_text(
             "❌ *Anda belum terdaftar!*\n\n"
             f"Gunakan `/daftar [role]` untuk mendaftar.\n\n"
@@ -550,9 +565,9 @@ async def list_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = "👥 *Daftar Anggota Tim Oryphem*\n\n"
     for r in ROLES:
         if r in grouped:
-            message += f"*{r.upper()}:* {', '.join(grouped[r])}\n"
+            message += f"*{ROLE_DISPLAY.get(r, r)}:* {', '.join(grouped[r])}\n"
         else:
-            message += f"*{r.upper()}:* (kosong)\n"
+            message += f"*{ROLE_DISPLAY.get(r, r)}:* (kosong)\n"
 
     await update.message.reply_text(message, parse_mode="Markdown")
 
