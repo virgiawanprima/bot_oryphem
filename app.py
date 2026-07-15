@@ -67,6 +67,8 @@ def init_db():
                 registered_at TEXT NOT NULL
             )
         """)
+        for old, new in ROLE_MIGRATION.items():
+            conn.execute("UPDATE users SET role = ? WHERE role = ?", (new, old))
         conn.commit()
     finally:
         conn.close()
@@ -174,6 +176,16 @@ ROLE_DISPLAY = {
     "frontend-developer": "FRONT END DEVELOPER",
 }
 
+ROLE_MIGRATION = {
+    "data": "data-mle",
+    "fullstack": "fullstack-developer",
+    "uiux": "uiux-designer",
+    "blockchain": "blockchain-developer",
+    "frontend": "frontend-developer",
+}
+
+ROLE_DISPLAY.update({k: ROLE_DISPLAY[v] for k, v in ROLE_MIGRATION.items()})
+
 
 def get_role(user_id):
     conn = sqlite3.connect(DATABASE)
@@ -246,29 +258,28 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_text = """
 🚀 *Selamat datang di Bot Tim Oryphem!*
 
-Bot ini membantu tim mengelola lomba dan registrasi role anggota.
+Bot untuk manajemen lomba dan role anggota tim.
 
-*Perintah Lomba:*
-/ikut [judul] | [link] | [tgl_h7] | [tgl_h1] - Tambah lomba baru
-/list - Lihat daftar lomba
-/batal [id] - Batalkan lomba
+📌 *Langkah pertama — Daftarkan role kamu:*
+`/daftar [role]`
 
-*Perintah Role:*
-/daftar [role] - Daftarkan role kamu
-/ubahrole [role] - Ganti role
-/role - Lihat role sendiri
-/listrole - Lihat semua anggota tim
-
-*Lainnya:*
-/start - Pesan ini
-/help - Panduan lengkap
-
-*Role tersedia:*
+Role yang tersedia:
 • `data-mle` — DATA & MLE
 • `fullstack-developer` — FULL STACK DEVELOPER
 • `uiux-designer` — UI/UX DESIGNER
 • `blockchain-developer` — BLOCKCHAIN DEVELOPER
 • `frontend-developer` — FRONT END DEVELOPER
+Contoh: `/daftar data-mle`
+
+Sudah daftar? Cek role kamu: `/role`
+
+📋 *Perintah lainnya:*
+/ikut — Tambah lomba baru
+/list — Lihat daftar lomba
+/batal [id] — Batalkan lomba
+/ubahrole [role] — Ganti role
+/listrole — Lihat semua anggota tim
+/help — Panduan lengkap
 
 Tim Oryphem ⚡
     """
