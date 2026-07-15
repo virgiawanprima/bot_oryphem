@@ -270,7 +270,7 @@ Bot ini membantu tim mengelola lomba dan registrasi role anggota.
 • `blockchain-developer` — BLOCKCHAIN DEVELOPER
 • `frontend-developer` — FRONT END DEVELOPER
 
-Tim Oryphem 🧡
+Tim Oryphem ⚡
     """
     await update.message.reply_text(welcome_text, parse_mode="Markdown")
 
@@ -314,7 +314,7 @@ Bot akan mengirim pengingat pada:
 Lomba otomatis dihapus setelah tanggal H-1 lewat.
 
 ---
-Tim Oryphem 🧡
+Tim Oryphem ⚡
     """
     await update.message.reply_text(help_text, parse_mode="Markdown")
 
@@ -606,7 +606,7 @@ async def daily_reminder(context: ContextTypes.DEFAULT_TYPE):
 Jangan sampai ketinggalan!
 
 ---
-Tim Oryphem 🧡
+Tim Oryphem ⚡
 """
         elif tgl_h1 == today:
             pesan = f"""
@@ -622,7 +622,7 @@ Cek kembali:
 ✅ Kodingan dan testing
 ✅ Semua persyaratan
 
-Semangat, Tim Oryphem! 🧡
+Semangat, Tim Oryphem! ⚡
 """
         else:
             continue
