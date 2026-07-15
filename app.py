@@ -10,11 +10,12 @@ import sqlite3
 from datetime import datetime, time
 from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.helpers import escape_markdown
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
+    CallbackQueryHandler,
     ContextTypes,
 )
 
@@ -255,35 +256,42 @@ def get_all_users():
 # --- FUNGSI COMMAND HANDLER ---
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    welcome_text = """
-🚀 *Selamat datang di Bot Tim Oryphem!*
+    user_id = update.effective_user.id
+    existing = get_role(user_id)
 
-Bot untuk manajemen lomba dan role anggota tim.
+    if existing:
+        welcome_text = f"""
+🚀 *Selamat datang kembali di Bot Tim Oryphem!*
 
-📌 *Langkah pertama — Daftarkan role kamu:*
-`/daftar [role]`
+Kamu terdaftar sebagai *{ROLE_DISPLAY.get(existing, existing)}* ⚡
 
-Role yang tersedia:
-• `data-mle` — DATA & MLE
-• `fullstack-developer` — FULL STACK DEVELOPER
-• `uiux-designer` — UI/UX DESIGNER
-• `blockchain-developer` — BLOCKCHAIN DEVELOPER
-• `frontend-developer` — FRONT END DEVELOPER
-Contoh: `/daftar data-mle`
-
-Sudah daftar? Cek role kamu: `/role`
-
-📋 *Perintah lainnya:*
+📋 *Perintah:*
 /ikut — Tambah lomba baru
 /list — Lihat daftar lomba
 /batal [id] — Batalkan lomba
-/ubahrole [role] — Ganti role
+/role — Cek role kamu
+/ubahrole — Ganti role
 /listrole — Lihat semua anggota tim
 /help — Panduan lengkap
+        """
+        await update.message.reply_text(welcome_text, parse_mode="Markdown")
+        return
 
-Tim Oryphem ⚡
-    """
-    await update.message.reply_text(welcome_text, parse_mode="Markdown")
+    keyboard = [
+        [InlineKeyboardButton("DATA & MLE", callback_data="role_data-mle")],
+        [InlineKeyboardButton("FULL STACK DEVELOPER", callback_data="role_fullstack-developer")],
+        [InlineKeyboardButton("UI/UX DESIGNER", callback_data="role_uiux-designer")],
+        [InlineKeyboardButton("BLOCKCHAIN DEVELOPER", callback_data="role_blockchain-developer")],
+        [InlineKeyboardButton("FRONT END DEVELOPER", callback_data="role_frontend-developer")],
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_text(
+        "🚀 *Selamat datang di Bot Tim Oryphem!*\n\n"
+        "📌 *Langkah pertama — Pilih role kamu:*",
+        parse_mode="Markdown",
+        reply_markup=reply_markup,
+    )
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -583,6 +591,28 @@ async def list_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(message, parse_mode="Markdown")
 
 
+# --- CALLBACK HANDLER UNTUK TOMBOL ROLE ---
+
+async def role_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    role = query.data.replace("role_", "")
+    user_id = query.from_user.id
+    username = query.from_user.username or query.from_user.full_name
+
+    success, message = daftar_user(user_id, username, role)
+    if success:
+        await query.edit_message_text(
+            f"✅ *Selamat! Kamu terdaftar sebagai* {ROLE_DISPLAY.get(role, role)}! ⚡\n\n"
+            "Gunakan `/role` untuk cek role kamu.\n"
+            "Gunakan `/help` untuk melihat semua perintah.",
+            parse_mode="Markdown"
+        )
+    else:
+        await query.edit_message_text(message, parse_mode="Markdown")
+
+
 # --- FUNGSI JOB (TUGAS OTOMATIS) ---
 
 async def daily_reminder(context: ContextTypes.DEFAULT_TYPE):
@@ -711,10 +741,12 @@ def main():
     application.add_handler(CommandHandler("role", role))
     application.add_handler(CommandHandler("listrole", list_role))
 
+    application.add_handler(CallbackQueryHandler(role_callback, pattern="^role_"))
+
     application.add_error_handler(error_handler)
 
     logger.info("Bot Oryphem sedang berjalan...")
-    application.run_polling(allowed_updates=["message"])
+    application.run_polling(allowed_updates=["message", "callback_query"])
 
 
 if __name__ == "__main__":
