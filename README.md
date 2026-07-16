@@ -1,7 +1,8 @@
 # Bot Telegram Tim Oryphem ⚡
 
-Bot manajemen lomba dan role registration untuk tim Oryphem.  
-Dibangun dengan [python-telegram-bot](https://github.com/python-telegram-bot/python-telegram-bot) v20+ dan SQLite.
+Bot manajemen lomba untuk tim Oryphem.  
+Full tap interface — gak perlu hapal command.  
+Dibangun dengan [python-telegram-bot](https://github.com/python-telegram-bot/python-telegram-bot) v22+ dan SQLite.
 
 ---
 
@@ -9,80 +10,88 @@ Dibangun dengan [python-telegram-bot](https://github.com/python-telegram-bot/pyt
 
 | Fitur | Detail |
 |-------|--------|
-| **Role Registration** | Daftar anggota tim via tombol interaktif (`/start`) atau command `/daftar` |
-| **Manajemen Lomba** | Tambah, lihat, dan batalkan lomba yang diikuti |
-| **Pengingat Otomatis** | Notifikasi H-7, H-3, H-1 setiap jam 09:00 WITA |
-| **Pembersihan Otomatis** | Lomba otomatis dihapus setelah H-1 lewat |
-| **Role Management** | Lihat role, ubah role, dan daftar semua anggota tim |
+| **Auto-Registrasi** | `/start` langsung daftarkan role sesuai anggota tim |
+| **Akses Eksklusif** | Hanya 5 anggota tim yang bisa pakai bot |
+| **Full Tap Menu** | Semua interaksi lewat tombol, gak perlu ngetik command |
+| **Tambah Lomba** | Input judul, link, tanggal buka & tutup via kalender tap |
+| **Pengingat Otomatis** | H-7, H-3, H-1 otomatis dari tanggal tutup (jam 09:00 WITA) |
+| **Pembersihan Otomatis** | Lomba dihapus setelah deadline lewat |
+| **Role Permanent** | Role tidak bisa diganti — sesuai mapping tim |
 
 ---
 
 ## 🚀 Cara Mulai
 
-Chat **@oryphem_bot** di Telegram, kirim `/start`, lalu tap tombol role yang tersedia.
-
-Atau daftar manual dengan perintah:
-
-```
-/daftar data-mle
-```
+Buka Telegram, cari **@oryphem_bot**, kirim `/start`.  
+Bot langsung sapa kamu dan tampilkan menu utama.
 
 ---
 
-## 📋 Perintah
+## 📋 Cara Pakai
 
-### Role Registration
+### Main Menu
+```
+[📋 Tambah Lomba]  [📋 Daftar Lomba]
+[👤 Role Saya]     [👥 Anggota Tim]
+[ℹ️ Bantuan]
+```
 
-| Perintah | Deskripsi | Contoh |
-|----------|-----------|--------|
-| `/start` | Registrasi role lewat tombol interaktif | `/start` |
-| `/daftar [role]` | Daftar role (alternatif manual) | `/daftar data-mle` |
-| `/ubahrole [role]` | Ganti role | `/ubahrole fullstack-developer` |
-| `/role` | Lihat role kamu saat ini | `/role` |
-| `/listrole` | Lihat semua anggota tim | `/listrole` |
+### Tambah Lomba
+1. Tap **📋 Tambah Lomba**
+2. Ketik judul lomba → kirim
+3. Ketik/paste link → kirim
+4. **Tap tanggal** di kalender untuk tanggal buka
+5. **Tap tanggal** di kalender untuk tanggal tutup
+6. Tap ✅ Simpan
+7. Kalau salah tanggal tutup ≤ tanggal buka → ada peringatan
 
-### Manajemen Lomba
+### Melihat & Hapus Lomba
+Tap **📋 Daftar Lomba** → setiap lomba ada tombol ❌ Hapus.
 
-| Perintah | Deskripsi | Contoh |
-|----------|-----------|--------|
-| `/ikut [judul] \| [link] \| [tgl_h7] \| [tgl_h1]` | Tambah lomba baru | `/ikut Lomba AI \| https://... \| 2026-07-20 \| 2026-07-26` |
-| `/list` | Lihat semua lomba + sisa hari | `/list` |
-| `/batal [id]` | Batalkan lomba berdasarkan ID | `/batal 1` |
-
-### Lainnya
-
-| Perintah | Deskripsi |
-|----------|-----------|
-| `/help` | Panduan lengkap penggunaan |
+### Role & Anggota
+- **👤 Role Saya** — Lihat role kamu
+- **👥 Anggota Tim** — Lihat semua anggota dengan nama panggilan
 
 ---
 
-## 🧑‍💻 Role Tersedia
+## 👥 Tim
 
-| Slug (command) | Display Name |
-|----------------|--------------|
-| `data-mle` | DATA & MLE |
-| `fullstack-developer` | FULL STACK DEVELOPER |
-| `uiux-designer` | UI/UX DESIGNER |
-| `blockchain-developer` | BLOCKCHAIN DEVELOPER |
-| `frontend-developer` | FRONT END DEVELOPER |
+| Username | Nama | Role |
+|----------|------|------|
+| `@alex123566` | Prima | DATA & MLE |
+| `@Anjayehan` | Raihan | UI/UX DESIGNER |
+| `@Zbisrih` | Iqbal | BLOCKCHAIN DEVELOPER |
+| `@ken14_14` | Baits | FULL STACK DEVELOPER |
+| `@hikkigayahachiman` | Jamal | FRONT END DEVELOPER |
+
+---
+
+## ⏰ Jadwal Pengingat Otomatis
+
+Bot kirim notifikasi ke grup setiap jam **09:00 WITA**:
+
+| Waktu | Pesan |
+|-------|-------|
+| **H-7** dari deadline | Persiapan dokumen dan konsep |
+| **H-3** dari deadline | Cek progress, kumpulkan bahan |
+| **H-1** dari deadline | Cek berkas, kodingan, testing |
 
 ---
 
 ## 🛠️ Menjalankan Lokal
 
 ```bash
-# 1. Clone repository
+# 1. Clone
 git clone https://github.com/virgiawanprima/bot_oryphem.git
 cd bot_oryphem
 
-# 2. Buat virtual environment
+# 2. Virtual env
 python3 -m venv .venv
 
-# 3. Install dependencies
+# 3. Install
 .venv/bin/pip install -r requirements.txt
 
-# 4. Isi file .env
+# 4. Isi .env
 # BOT_TOKEN=token_dari_botfather
 # CHAT_ID=id_grup_atau_kosongkan
 
@@ -90,7 +99,7 @@ python3 -m venv .venv
 ./run.sh
 ```
 
-Atau langsung:
+Atau:
 
 ```bash
 .venv/bin/python3 app.py
@@ -101,12 +110,10 @@ Atau langsung:
 ## 📦 Deploy
 
 ### FPS.ms
-
 1. Upload `app.py`, `requirements.txt`, `.env`
 2. Klik **Restart** di tab Console
 
-### Run di background (Linux)
-
+### Background (Linux)
 ```bash
 nohup .venv/bin/python3 app.py > bot.log 2>&1 &
 ```
@@ -115,9 +122,10 @@ nohup .venv/bin/python3 app.py > bot.log 2>&1 &
 
 ## 🔒 Keamanan
 
-- File `.env` sudah di `.gitignore` — token tidak akan tercommit
-- Semua query SQL menggunakan parameterized query (`?`) — aman dari SQL injection
+- `.env` di `.gitignore` — token tidak tercommit
+- Semua query SQL parameterized (`?`) — **zero SQL injection**
 - Input user di-escape sebelum ditampilkan di Markdown
+- Hanya 5 username tertentu yang bisa akses bot
 
 ---
 
@@ -125,10 +133,10 @@ nohup .venv/bin/python3 app.py > bot.log 2>&1 &
 
 ```
 bot_oryphem/
-├── app.py             # Bot utama (721+ baris)
-├── run.sh             # Script menjalankan bot
+├── app.py             # Bot utama (900+ baris)
+├── run.sh             # Script jalanin bot
 ├── requirements.txt   # Dependencies
-├── .env               # Konfigurasi (token, dll) — tidak di-commit
+├── .env               # Token & config (tidak di-commit)
 ├── .gitignore         # File yang diabaikan git
 └── README.md          # Dokumentasi ini
 ```
