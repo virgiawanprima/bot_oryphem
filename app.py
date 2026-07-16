@@ -320,7 +320,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg = f"""
 🚀 *Halo {name}!*
 
-Kamu masih anggota Oryphem sebagai *{ROLE_DISPLAY.get(role, role)}* ⚡
+Kamu adalah anggota Oryphem sebagai *{ROLE_DISPLAY.get(role, role)}* ⚡
 {quote}
 
 📋 *Perintah:*
