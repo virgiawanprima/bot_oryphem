@@ -613,54 +613,14 @@ async def show_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if role:
         msg = f"🧑‍💻 *Role Kamu:* {ROLE_DISPLAY.get(role, role)}"
-        keyboard = [
-            [InlineKeyboardButton("🔄 Ganti Role", callback_data="menu_gantirole")],
-            [InlineKeyboardButton("🔙 Kembali", callback_data="menu_back")],
-        ]
     else:
         msg = "❌ *Belum terdaftar*"
-        keyboard = [[InlineKeyboardButton("🔙 Kembali", callback_data="menu_back")]]
-
-    await query.edit_message_text(msg, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
-
-
-async def handle_gantirole(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    keyboard = []
-    for r in ROLES:
-        keyboard.append([InlineKeyboardButton(
-            ROLE_DISPLAY.get(r, r), callback_data=f"ganti_{r}"
-        )])
-    keyboard.append([InlineKeyboardButton("🔙 Kembali", callback_data="menu_back")])
-
-    await query.edit_message_text(
-        "🔄 *Pilih role baru:*",
-        parse_mode="Markdown",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
-
-async def handle_pilih_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    data = query.data
-    role = data.replace("ganti_", "")
-    user_id = query.from_user.id
-
-    if ubah_role(user_id, role):
-        msg = f"✅ *Role berhasil diganti!*\nSekarang kamu *{ROLE_DISPLAY.get(role, role)}* ⚡"
-    else:
-        msg = "❌ *Gagal mengganti role*"
 
     keyboard = [[InlineKeyboardButton("🔙 Kembali", callback_data="menu_back")]]
     await query.edit_message_text(msg, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
 
 
-async def handle_list_role_anggota(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # for the menu_anggota callback - handled by menu_callback which calls show_anggota
-    pass
+
 
 
 async def show_anggota(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -690,7 +650,7 @@ async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "📋 *Tambah Lomba*\n"
         "Menu → Tambah Lomba → ikuti langkah\n\n"
         "👤 *Role*\n"
-        "Menu → Role Saya / Ganti Role\n\n"
+        "Menu → Role Saya\n\n"
         "⏰ *Pengingat Otomatis*\n"
         "• H-7 jam 08:00 WIB\n"
         "• H-1 jam 08:00 WIB\n\n"
@@ -772,10 +732,6 @@ async def callback_dispatcher(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     if data.startswith("hapus_"):
         await handle_hapus(update, context)
-        return
-
-    if data.startswith("ganti_"):
-        await handle_pilih_role(update, context)
         return
 
     if data.startswith("h7_") or data.startswith("h1_"):
