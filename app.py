@@ -339,7 +339,7 @@ def format_date_relative(date_str):
             return f"{date_str} ({delta} hari lagi)"
         else:
             return f"{date_str} (Sudah Lewat {abs(delta)} hari)"
-    except:
+    except ValueError:
         return date_str
 
 
@@ -443,6 +443,9 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # --- CONVERSATION: TAMBAH LOMBA ---
 
 async def handle_conversation_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_authorized(update.effective_user.username):
+        return
+
     state = context.user_data.get("state")
     if not state:
         return
@@ -486,6 +489,9 @@ async def handle_conversation_message(update: Update, context: ContextTypes.DEFA
 async def handle_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+    if not is_authorized(query.from_user.username):
+        await query.edit_message_text("⛔ *Akses Ditolak!*", parse_mode="Markdown")
+        return
     data = query.data
     parts = data.split("_")
     prefix = parts[0]
@@ -538,6 +544,15 @@ async def handle_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         context.user_data["state"] = "H1"
     elif prefix == "h1":
+        h7 = context.user_data.get("h7")
+        if h7 and selected <= h7:
+            now = datetime.now(WIB)
+            await query.edit_message_text(
+                "❌ *H-1 harus setelah H-7!*\n\nPilih tanggal yang lebih besar.",
+                parse_mode="Markdown",
+                reply_markup=build_calendar(now.year, now.month, prefix="h1")
+            )
+            return
         context.user_data["h1"] = selected
         await show_konfirmasi(query, context)
 
@@ -577,6 +592,9 @@ async def show_list_lomba(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_hapus(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+    if not is_authorized(query.from_user.username):
+        await query.edit_message_text("⛔ *Akses Ditolak!*", parse_mode="Markdown")
+        return
     data = query.data
     lomba_id = int(data.replace("hapus_", ""))
 
@@ -686,6 +704,9 @@ async def show_konfirmasi(query, context):
 async def handle_konfirmasi(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+    if not is_authorized(query.from_user.username):
+        await query.edit_message_text("⛔ *Akses Ditolak!*", parse_mode="Markdown")
+        return
     data = query.data
 
     if data == "konfirmasi_simpan":
@@ -721,9 +742,7 @@ async def callback_dispatcher(update: Update, context: ContextTypes.DEFAULT_TYPE
     data = query.data
 
     if data.startswith("menu_"):
-        result = await menu_callback(update, context)
-        if isinstance(result, str):
-            context.user_data["state"] = result
+        await menu_callback(update, context)
         return
 
     if data.startswith("hapus_"):
