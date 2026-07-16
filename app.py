@@ -10,7 +10,7 @@ import sqlite3
 from datetime import datetime, time
 from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update
 from telegram.helpers import escape_markdown
 from telegram.ext import (
     ApplicationBuilder,
@@ -43,6 +43,39 @@ if _raw_chat_id:
         CHAT_ID = None
 else:
     CHAT_ID = None
+
+
+# --- ANGGOTA TIM ---
+
+TEAM_MEMBERS = {
+    "alex123566": {
+        "name": "Prima",
+        "role": "data-mle",
+        "quote": '📊 "In God we trust, all others must bring data."',
+    },
+    "Anjayehan": {
+        "name": "Raihan",
+        "role": "uiux-designer",
+        "quote": '🎨 "Design is not just what it looks like. Design is how it works."',
+    },
+    "Zbisrih": {
+        "name": "Iqbal",
+        "role": "blockchain-developer",
+        "quote": '⛓️ "Trust the code, not the middleman."',
+    },
+    "ken14_14": {
+        "name": "Baits",
+        "role": "fullstack-developer",
+        "quote": "🛠️ \"Full stack is not about knowing everything. It's about connecting everything.\"",
+    },
+    "hikkigayahachiman": {
+        "name": "Jamal",
+        "role": "frontend-developer",
+        "quote": '✨ "A user interface is like a joke. If you have to explain it, it\'s not that good."',
+    },
+}
+
+ALLOWED_USERNAMES = set(TEAM_MEMBERS.keys())
 
 
 # --- FUNGSI DATABASE ---
@@ -253,48 +286,78 @@ def get_all_users():
         conn.close()
 
 
+# --- ACCESS CONTROL ---
+
+def is_authorized(username):
+    return username in ALLOWED_USERNAMES
+
+
+async def unauthorized_reply(update: Update):
+    await update.message.reply_text(
+        "⛔ *Akses Ditolak!*\n\nBot ini hanya untuk anggota tim Oryphem.",
+        parse_mode="Markdown"
+    )
+
+
 # --- FUNGSI COMMAND HANDLER ---
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
+    user = update.effective_user
+    username = user.username
+    user_id = user.id
+
+    if not username or not is_authorized(username):
+        await unauthorized_reply(update)
+        return
+
+    member = TEAM_MEMBERS[username]
+    name = member["name"]
+    role = member["role"]
+    quote = member["quote"]
+
     existing = get_role(user_id)
-
     if existing:
-        welcome_text = f"""
-🚀 *Selamat datang kembali di Bot Tim Oryphem!*
+        msg = f"""
+🚀 *Halo {name}!*
 
-Kamu terdaftar sebagai *{ROLE_DISPLAY.get(existing, existing)}* ⚡
+Kamu masih anggota Oryphem sebagai *{ROLE_DISPLAY.get(role, role)}* ⚡
+{quote}
 
 📋 *Perintah:*
 /ikut — Tambah lomba baru
 /list — Lihat daftar lomba
 /batal [id] — Batalkan lomba
 /role — Cek role kamu
-/ubahrole — Ganti role
 /listrole — Lihat semua anggota tim
 /help — Panduan lengkap
         """
-        await update.message.reply_text(welcome_text, parse_mode="Markdown")
+        await update.message.reply_text(msg, parse_mode="Markdown")
         return
 
-    keyboard = [
-        [InlineKeyboardButton("DATA & MLE", callback_data="role_data-mle")],
-        [InlineKeyboardButton("FULL STACK DEVELOPER", callback_data="role_fullstack-developer")],
-        [InlineKeyboardButton("UI/UX DESIGNER", callback_data="role_uiux-designer")],
-        [InlineKeyboardButton("BLOCKCHAIN DEVELOPER", callback_data="role_blockchain-developer")],
-        [InlineKeyboardButton("FRONT END DEVELOPER", callback_data="role_frontend-developer")],
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    display_name = user.full_name or username
+    daftar_user(user_id, display_name, role)
 
-    await update.message.reply_text(
-        "🚀 *Selamat datang di Bot Tim Oryphem!*\n\n"
-        "📌 *Langkah pertama — Pilih role kamu:*",
-        parse_mode="Markdown",
-        reply_markup=reply_markup,
-    )
+    msg = f"""
+🚀 *Halo {name}!*
+
+Kamu adalah anggota Oryphem sebagai *{ROLE_DISPLAY.get(role, role)}* ⚡
+{quote}
+
+📋 *Perintah:*
+/ikut — Tambah lomba baru
+/list — Lihat daftar lomba
+/batal [id] — Batalkan lomba
+/role — Cek role kamu
+/listrole — Lihat semua anggota tim
+/help — Panduan lengkap
+    """
+    await update.message.reply_text(msg, parse_mode="Markdown")
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_authorized(update.effective_user.username):
+        await unauthorized_reply(update)
+        return
     help_text = """
 📖 *Panduan Penggunaan Bot*
 
@@ -339,6 +402,9 @@ Tim Oryphem ⚡
 
 
 async def ikut(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_authorized(update.effective_user.username):
+        await unauthorized_reply(update)
+        return
     args = " ".join(context.args)
 
     if not args:
@@ -403,6 +469,9 @@ async def ikut(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def list_lomba(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_authorized(update.effective_user.username):
+        await unauthorized_reply(update)
+        return
     lomba_list = get_all_lomba()
 
     if not lomba_list:
@@ -460,6 +529,9 @@ async def list_lomba(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def batal(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_authorized(update.effective_user.username):
+        await unauthorized_reply(update)
+        return
     if not context.args:
         await update.message.reply_text(
             "❌ *Format salah!*\n\n"
@@ -508,6 +580,9 @@ async def batal(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # --- FUNGSI COMMAND HANDLER UNTUK ROLE ---
 
 async def daftar(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_authorized(update.effective_user.username):
+        await unauthorized_reply(update)
+        return
     if not context.args:
         role_list = "\n".join(f"• `{k}` — {v}" for k, v in ROLE_DISPLAY.items())
         await update.message.reply_text(
@@ -528,6 +603,9 @@ async def daftar(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def ubahrole(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_authorized(update.effective_user.username):
+        await unauthorized_reply(update)
+        return
     if not context.args:
         role_list = "\n".join(f"• `{k}` — {v}" for k, v in ROLE_DISPLAY.items())
         await update.message.reply_text(
@@ -547,6 +625,9 @@ async def ubahrole(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def role(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_authorized(update.effective_user.username):
+        await unauthorized_reply(update)
+        return
     user_id = update.effective_user.id
     role_user = get_role(user_id)
 
@@ -567,6 +648,9 @@ async def role(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def list_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_authorized(update.effective_user.username):
+        await unauthorized_reply(update)
+        return
     users = get_all_users()
 
     if not users:
@@ -596,6 +680,10 @@ async def list_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def role_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+
+    if not is_authorized(query.from_user.username):
+        await query.edit_message_text("⛔ *Akses Ditolak!*", parse_mode="Markdown")
+        return
 
     role = query.data.replace("role_", "")
     user_id = query.from_user.id
