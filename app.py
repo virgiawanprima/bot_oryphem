@@ -7,15 +7,18 @@ Fitur: Manajemen Lomba, Role Registration, Pengingat Otomatis, Pembersihan Data
 import os
 import logging
 import sqlite3
-from datetime import datetime, time
+import calendar
+from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.helpers import escape_markdown
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
+    MessageHandler,
     CallbackQueryHandler,
+    filters,
     ContextTypes,
 )
 
@@ -43,7 +46,6 @@ if _raw_chat_id:
         CHAT_ID = None
 else:
     CHAT_ID = None
-
 
 # --- ANGGOTA TIM ---
 
@@ -76,7 +78,6 @@ TEAM_MEMBERS = {
 }
 
 ALLOWED_USERNAMES = set(TEAM_MEMBERS.keys())
-
 
 # --- FUNGSI DATABASE ---
 
@@ -234,43 +235,34 @@ def get_role(user_id):
 
 def daftar_user(user_id, username, role):
     if role not in ROLES:
-        role_list = "\n".join(f"• `{k}` — {v}" for k, v in ROLE_DISPLAY.items())
-        return False, f"Role tidak valid!\n\nPilih salah satu:\n{role_list}"
-
+        return False
     conn = sqlite3.connect(DATABASE)
     try:
         cursor = conn.cursor()
         cursor.execute("SELECT role FROM users WHERE user_id = ?", (user_id,))
         existing = cursor.fetchone()
         if existing:
-            return False, f"Anda sudah terdaftar sebagai *{ROLE_DISPLAY.get(existing[0], existing[0])}*. Gunakan `/ubahrole [role]` jika ingin mengganti."
-
+            return False
         now = datetime.now(WIB).isoformat()
         cursor.execute(
             "INSERT INTO users (user_id, username, role, registered_at) VALUES (?, ?, ?, ?)",
             (user_id, username, role, now)
         )
         conn.commit()
-        return True, f"✅ Berhasil terdaftar sebagai *{ROLE_DISPLAY.get(role, role)}*!"
+        return True
     finally:
         conn.close()
 
 
 def ubah_role(user_id, role):
     if role not in ROLES:
-        role_list = "\n".join(f"• `{k}` — {v}" for k, v in ROLE_DISPLAY.items())
-        return False, f"Role tidak valid!\n\nPilih salah satu:\n{role_list}"
-
+        return False
     conn = sqlite3.connect(DATABASE)
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT user_id FROM users WHERE user_id = ?", (user_id,))
-        if not cursor.fetchone():
-            return False, "Anda belum terdaftar. Gunakan `/daftar [role]` terlebih dahulu."
-
         cursor.execute("UPDATE users SET role = ? WHERE user_id = ?", (role, user_id))
         conn.commit()
-        return True, f"✅ Role berhasil diubah menjadi *{ROLE_DISPLAY.get(role, role)}*!"
+        return cursor.rowcount > 0
     finally:
         conn.close()
 
@@ -292,14 +284,80 @@ def is_authorized(username):
     return username in ALLOWED_USERNAMES
 
 
-async def unauthorized_reply(update: Update):
-    await update.message.reply_text(
-        "⛔ *Akses Ditolak!*\n\nBot ini hanya untuk anggota tim Oryphem.",
-        parse_mode="Markdown"
-    )
+# --- BANTUAN KALENDER ---
+
+MONTH_NAMES = [
+    "", "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+    "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+]
+DAY_NAMES = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"]
+
+def build_calendar(year, month, prefix="cal"):
+    today = datetime.now(WIB).date()
+    cal = calendar.Calendar()
+
+    keyboard = [
+        [
+            InlineKeyboardButton("⬅️", callback_data=f"{prefix}_prev_{year}_{month}"),
+            InlineKeyboardButton(f"{MONTH_NAMES[month]} {year}", callback_data="cal_ignore"),
+            InlineKeyboardButton("➡️", callback_data=f"{prefix}_next_{year}_{month}"),
+        ],
+        [InlineKeyboardButton(d, callback_data="cal_ignore") for d in DAY_NAMES],
+    ]
+
+    for week in cal.monthdayscalendar(year, month):
+        row = []
+        for day in week:
+            if day == 0:
+                row.append(InlineKeyboardButton(" ", callback_data="cal_ignore"))
+            else:
+                date_ = " " if day == today.day and month == today.month and year == today.year else str(day)
+                row.append(InlineKeyboardButton(str(day), callback_data=f"{prefix}_day_{year}_{month}_{day}"))
+        keyboard.append(row)
+
+    keyboard.append([
+        InlineKeyboardButton("🎯 Hari Ini", callback_data=f"{prefix}_today"),
+        InlineKeyboardButton("🎯 Besok", callback_data=f"{prefix}_tomorrow"),
+        InlineKeyboardButton("🎯 +7 Hari", callback_data=f"{prefix}_plus7"),
+    ])
+    keyboard.append([InlineKeyboardButton("❌ Batal", callback_data="menu_cancel")])
+
+    return InlineKeyboardMarkup(keyboard)
 
 
-# --- FUNGSI COMMAND HANDLER ---
+def format_date_relative(date_str):
+    today = datetime.now(WIB).date()
+    try:
+        d = datetime.strptime(date_str, "%Y-%m-%d").date()
+        delta = (d - today).days
+        if delta == 0:
+            return f"{date_str} (Hari Ini 🚨)"
+        elif delta == 1:
+            return f"{date_str} (Besok)"
+        elif delta == 2:
+            return f"{date_str} (Lusa)"
+        elif delta > 0:
+            return f"{date_str} ({delta} hari lagi)"
+        else:
+            return f"{date_str} (Sudah Lewat {abs(delta)} hari)"
+    except:
+        return date_str
+
+
+# --- MAIN MENU ---
+
+def main_menu_keyboard():
+    keyboard = [
+        [InlineKeyboardButton("📋 Tambah Lomba", callback_data="menu_tambah")],
+        [InlineKeyboardButton("📋 Daftar Lomba", callback_data="menu_list")],
+        [InlineKeyboardButton("👤 Role Saya", callback_data="menu_role")],
+        [InlineKeyboardButton("👥 Anggota Tim", callback_data="menu_anggota")],
+        [InlineKeyboardButton("ℹ️ Bantuan", callback_data="menu_bantuan")],
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+
+# --- COMMAND /START ---
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -307,7 +365,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = user.id
 
     if not username or not is_authorized(username):
-        await unauthorized_reply(update)
+        await update.message.reply_text(
+            "⛔ *Akses Ditolak!*\n\nBot ini hanya untuk anggota tim Oryphem.",
+            parse_mode="Markdown"
+        )
         return
 
     member = TEAM_MEMBERS[username]
@@ -316,389 +377,420 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     quote = member["quote"]
 
     existing = get_role(user_id)
-    if existing:
-        msg = f"""
-🚀 *Halo {name}!*
+    if not existing:
+        daftar_user(user_id, username, role)
 
-Kamu adalah anggota Oryphem sebagai *{ROLE_DISPLAY.get(role, role)}* ⚡
-{quote}
+    msg = (
+        f"🚀 *Halo {name}!*\n\n"
+        f"Kamu adalah anggota Oryphem sebagai *{ROLE_DISPLAY.get(role, role)}* ⚡\n"
+        f"{quote}"
+    )
 
-📋 *Perintah:*
-/ikut — Tambah lomba baru
-/list — Lihat daftar lomba
-/batal [id] — Batalkan lomba
-/role — Cek role kamu
-/listrole — Lihat semua anggota tim
-/help — Panduan lengkap
-        """
-        await update.message.reply_text(msg, parse_mode="Markdown")
+    await update.message.reply_text(msg, parse_mode="Markdown", reply_markup=main_menu_keyboard())
+
+
+# --- MAIN MENU CALLBACK ---
+
+async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+    user = query.from_user
+    username = user.username
+
+    if not is_authorized(username):
+        await query.edit_message_text("⛔ *Akses Ditolak!*", parse_mode="Markdown")
         return
 
-    daftar_user(user_id, username, role)
-
-    msg = f"""
-🚀 *Halo {name}!*
-
-Kamu adalah anggota Oryphem sebagai *{ROLE_DISPLAY.get(role, role)}* ⚡
-{quote}
-
-📋 *Perintah:*
-/ikut — Tambah lomba baru
-/list — Lihat daftar lomba
-/batal [id] — Batalkan lomba
-/role — Cek role kamu
-/listrole — Lihat semua anggota tim
-/help — Panduan lengkap
-    """
-    await update.message.reply_text(msg, parse_mode="Markdown")
-
-
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_authorized(update.effective_user.username):
-        await unauthorized_reply(update)
-        return
-    help_text = """
-📖 *Panduan Penggunaan Bot*
-
-*1. Registrasi Role Anggota*
-Daftarkan role kamu sekali saja:
-`/daftar [role]`
-
-Role: data, fullstack, uiux, blockchain, frontend
-
-Contoh: `/daftar data`
-
-Cek role: `/role`
-Lihat semua anggota: `/listrole`
-Ganti role: `/ubahrole [role]`
-
-*2. Menambahkan Lomba*
-`/ikut [judul] | [link] | [tgl_h7] | [tgl_h1]`
-
-Contoh:
-`/ikut Lomba Data Science | https://lomba.com | 2026-07-13 | 2026-07-19`
-
-*3. Melihat Daftar Lomba*
-`/list`
-
-*4. Membatalkan Lomba*
-`/batal [id]`
-
-Contoh: `/batal 3`
-
-*5. Pengingat Otomatis*
-Bot akan mengirim pengingat pada:
-- H-7: Persiapan dokumen dan konsep
-- H-1: Cek kembali berkas dan kodingan
-
-*6. Pembersihan Otomatis*
-Lomba otomatis dihapus setelah tanggal H-1 lewat.
-
----
-Tim Oryphem ⚡
-    """
-    await update.message.reply_text(help_text, parse_mode="Markdown")
-
-
-async def ikut(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_authorized(update.effective_user.username):
-        await unauthorized_reply(update)
-        return
-    args = " ".join(context.args)
-
-    if not args:
-        await update.message.reply_text(
-            "❌ *Format salah!*\n\n"
-            "Gunakan format:\n"
-            "`/ikut [judul] | [link] | [tgl_h7] | [tgl_h1]`\n\n"
-            "Contoh:\n"
-            "`/ikut Lomba Data Science | https://lomba.com | 2026-07-13 | 2026-07-19`",
-            parse_mode="Markdown"
+    if data == "menu_tambah":
+        context.user_data.clear()
+        context.user_data["state"] = "JUDUL"
+        await query.edit_message_text(
+            "📌 *Judul lomba?*\n\nKetik nama lombanya.",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Batal", callback_data="menu_cancel")]])
         )
         return
 
-    parts = [p.strip() for p in args.split("|")]
-
-    if len(parts) != 4:
-        await update.message.reply_text(
-            "❌ *Format salah!*\n\n"
-            "Pastikan menggunakan 4 bagian yang dipisahkan dengan ` | `:\n"
-            "`[judul] | [link] | [tgl_h7] | [tgl_h1]`\n\n"
-            "Contoh:\n"
-            "`/ikut Lomba Data Science | https://lomba.com | 2026-07-13 | 2026-07-19`",
-            parse_mode="Markdown"
-        )
+    elif data == "menu_list":
+        await show_list_lomba(update, context)
         return
 
-    judul, link, tanggal_h7, tanggal_h1 = parts
-
-    try:
-        datetime.strptime(tanggal_h7, "%Y-%m-%d")
-        datetime.strptime(tanggal_h1, "%Y-%m-%d")
-    except ValueError:
-        await update.message.reply_text(
-            "❌ *Format tanggal salah!*\n\n"
-            "Gunakan format: `YYYY-MM-DD`\n"
-            "Contoh: `2026-07-13`",
-            parse_mode="Markdown"
-        )
+    elif data == "menu_role":
+        await show_role(update, context)
         return
 
-    try:
-        lomba_id = tambah_lomba(judul, link, tanggal_h7, tanggal_h1)
-        safe_judul = escape_markdown(judul, version=1)
-        safe_link = link.replace(")", "%29")
-        await update.message.reply_text(
-            f"✅ *Lomba berhasil ditambahkan!*\n\n"
-            f"📌 *Judul:* {safe_judul}\n"
-            f"🔗 *Link:* {safe_link}\n"
-            f"📅 *H-7:* {tanggal_h7}\n"
-            f"📅 *H-1:* {tanggal_h1}\n"
-            f"🆔 *ID:* {lomba_id}\n\n"
-            f"Gunakan `/list` untuk melihat semua lomba.",
-            parse_mode="Markdown"
-        )
-        logger.info(f"Lomba ditambahkan: {judul} (ID: {lomba_id})")
-    except Exception as e:
-        logger.error(f"Error saat menambah lomba: {e}")
-        await update.message.reply_text(
-            "❌ *Gagal menambahkan lomba!*\n"
-            "Terjadi kesalahan pada server. Silakan coba lagi."
-        )
-
-
-async def list_lomba(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_authorized(update.effective_user.username):
-        await unauthorized_reply(update)
+    elif data == "menu_anggota":
+        await show_anggota(update, context)
         return
+
+    elif data == "menu_bantuan":
+        await show_help(update, context)
+        return
+
+    elif data == "menu_back" or data == "menu_cancel":
+        context.user_data.clear()
+        member = TEAM_MEMBERS.get(username)
+        if member:
+            name = member["name"]
+            role = member["role"]
+            msg = f"🚀 *{name}!* Kamu adalah *{ROLE_DISPLAY.get(role, role)}* ⚡"
+        else:
+            msg = "🚀 *Menu Utama* ⚡"
+        await query.edit_message_text(msg, parse_mode="Markdown", reply_markup=main_menu_keyboard())
+        return
+
+
+# --- CONVERSATION: TAMBAH LOMBA ---
+
+async def handle_conversation_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    state = context.user_data.get("state")
+    if not state:
+        return
+
+    text = update.message.text.strip()
+
+    if state == "JUDUL":
+        if len(text) > 200:
+            await update.message.reply_text("❌ *Judul terlalu panjang!* Maksimal 200 karakter.", parse_mode="Markdown")
+            return
+        if not text:
+            await update.message.reply_text("❌ *Judul tidak boleh kosong!*", parse_mode="Markdown")
+            return
+        context.user_data["judul"] = text
+        await update.message.reply_text(
+            "🔗 *Link lomba?*\n\nKirim link atau paste URL-nya.",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("❌ Batal", callback_data="menu_cancel")]])
+        )
+        context.user_data["state"] = "LINK"
+
+    elif state == "LINK":
+        if not text.startswith(("http://", "https://")):
+            await update.message.reply_text(
+                "❌ *Link tidak valid!* Pastikan dimulai dengan `http://` atau `https://`.",
+                parse_mode="Markdown"
+            )
+            return
+        context.user_data["link"] = text
+        now = datetime.now(WIB)
+        await update.message.reply_text(
+            "📅 *Pilih tanggal H-7:*",
+            parse_mode="Markdown",
+            reply_markup=build_calendar(now.year, now.month, prefix="h7")
+        )
+        context.user_data["state"] = "H7"
+
+
+# --- CALLBACK HANDLERS ---
+
+async def handle_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+    parts = data.split("_")
+    prefix = parts[0]
+
+    now = datetime.now(WIB)
+
+    if data == f"{prefix}_today":
+        selected = now.date().isoformat()
+    elif data == f"{prefix}_tomorrow":
+        selected = (now.date() + timedelta(days=1)).isoformat()
+    elif data == f"{prefix}_plus7":
+        selected = (now.date() + timedelta(days=7)).isoformat()
+    elif parts[1] == "prev":
+        y, m = int(parts[2]), int(parts[3])
+        if m == 1:
+            y, m = y - 1, 12
+        else:
+            m -= 1
+        await query.edit_message_text(
+            "📅 *Pilih tanggal:*" if prefix == "h7" else "📅 *Pilih tanggal H-1:*",
+            parse_mode="Markdown",
+            reply_markup=build_calendar(y, m, prefix=prefix)
+        )
+        return
+    elif parts[1] == "next":
+        y, m = int(parts[2]), int(parts[3])
+        if m == 12:
+            y, m = y + 1, 1
+        else:
+            m += 1
+        await query.edit_message_text(
+            "📅 *Pilih tanggal:*" if prefix == "h7" else "📅 *Pilih tanggal H-1:*",
+            parse_mode="Markdown",
+            reply_markup=build_calendar(y, m, prefix=prefix)
+        )
+        return
+    elif parts[1] == "day":
+        y, m, d = int(parts[2]), int(parts[3]), int(parts[4])
+        selected = f"{y:04d}-{m:02d}-{d:02d}"
+    else:
+        return
+
+    if prefix == "h7":
+        context.user_data["h7"] = selected
+        now = datetime.now(WIB)
+        await query.edit_message_text(
+            "📅 *Pilih tanggal H-1:*",
+            parse_mode="Markdown",
+            reply_markup=build_calendar(now.year, now.month, prefix="h1")
+        )
+        context.user_data["state"] = "H1"
+    elif prefix == "h1":
+        context.user_data["h1"] = selected
+        await show_konfirmasi(query, context)
+
+
+async def show_list_lomba(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
     lomba_list = get_all_lomba()
 
     if not lomba_list:
-        await update.message.reply_text(
-            "📭 *Belum ada lomba yang diikuti.*\n\n"
-            "Gunakan `/ikut` untuk menambahkan lomba.",
-            parse_mode="Markdown"
+        keyboard = [[InlineKeyboardButton("➕ Tambah Lomba", callback_data="menu_tambah")],
+                     [InlineKeyboardButton("🔙 Kembali", callback_data="menu_back")]]
+        await query.edit_message_text(
+            "📭 *Belum ada lomba.*\n\nGunakan menu Tambah Lomba.",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(keyboard)
         )
         return
 
-    today = datetime.now(WIB).date()
-    message = "📋 *Daftar Lomba yang Diikuti:*\n\n"
-
+    msg = "📋 *Daftar Lomba:*\n\n"
+    keyboard = []
     for l in lomba_list:
         l_id, judul, link, tgl_h7, tgl_h1 = l
         safe_judul = escape_markdown(judul, version=1)
-        safe_link = link.replace(")", "%29")
+        msg += f"🆔 *{l_id}* — {safe_judul}\n"
+        msg += f"  H\\-7: {format_date_relative(tgl_h7)}\n"
+        msg += f"  H\\-1: {format_date_relative(tgl_h1)}\n\n"
+        keyboard.append([InlineKeyboardButton(f"❌ Hapus #{l_id}", callback_data=f"hapus_{l_id}")])
 
-        try:
-            h7_date = datetime.strptime(tgl_h7, "%Y-%m-%d").date()
-            h1_date = datetime.strptime(tgl_h1, "%Y-%m-%d").date()
-            days_to_h7 = (h7_date - today).days
-            days_to_h1 = (h1_date - today).days
-        except ValueError:
-            days_to_h7 = "?"
-            days_to_h1 = "?"
+    keyboard.append([InlineKeyboardButton("➕ Tambah Baru", callback_data="menu_tambah")])
+    keyboard.append([InlineKeyboardButton("🔙 Kembali", callback_data="menu_back")])
 
-        message += f"🆔 *{l_id}*\n"
-        message += f"📌 {safe_judul}\n"
-        message += f"🔗 [Link]({safe_link})\n"
-        message += f"📅 H-7: {tgl_h7} "
-        if isinstance(days_to_h7, int) and days_to_h7 > 0:
-            message += f"({days_to_h7} hari lagi)\n"
-        elif isinstance(days_to_h7, int) and days_to_h7 == 0:
-            message += "(HARI INI! 🚨)\n"
-        elif isinstance(days_to_h7, int) and days_to_h7 < 0:
-            message += f"(sudah lewat {abs(days_to_h7)} hari)\n"
-        else:
-            message += "\n"
-
-        message += f"📅 H-1: {tgl_h1} "
-        if isinstance(days_to_h1, int) and days_to_h1 > 0:
-            message += f"({days_to_h1} hari lagi)\n"
-        elif isinstance(days_to_h1, int) and days_to_h1 == 0:
-            message += "(HARI INI! 🚨)\n"
-        elif isinstance(days_to_h1, int) and days_to_h1 < 0:
-            message += f"(sudah lewat {abs(days_to_h1)} hari)\n"
-        else:
-            message += "\n"
-        message += "\n"
-
-    message += "\nGunakan `/batal [id]` untuk membatalkan lomba."
-
-    await update.message.reply_text(message, parse_mode="Markdown", disable_web_page_preview=True)
+    await query.edit_message_text(msg, parse_mode="MarkdownV2",
+                                   reply_markup=InlineKeyboardMarkup(keyboard),
+                                   disable_web_page_preview=True)
 
 
-async def batal(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_authorized(update.effective_user.username):
-        await unauthorized_reply(update)
-        return
-    if not context.args:
-        await update.message.reply_text(
-            "❌ *Format salah!*\n\n"
-            "Gunakan format:\n"
-            "`/batal [id]`\n\n"
-            "Gunakan `/list` untuk melihat ID lomba.",
-            parse_mode="Markdown"
-        )
-        return
-
-    try:
-        lomba_id = int(context.args[0])
-    except ValueError:
-        await update.message.reply_text(
-            "❌ *ID harus berupa angka!*\n\n"
-            "Contoh: `/batal 3`",
-            parse_mode="Markdown"
-        )
-        return
+async def handle_hapus(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+    lomba_id = int(data.replace("hapus_", ""))
 
     lomba = get_lomba_by_id(lomba_id)
     if not lomba:
-        await update.message.reply_text(
-            f"❌ *Lomba dengan ID {lomba_id} tidak ditemukan!*\n\n"
-            "Gunakan `/list` untuk melihat daftar lomba.",
-            parse_mode="Markdown"
+        await query.edit_message_text(
+            "❌ *Lomba tidak ditemukan!*",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Kembali", callback_data="menu_list")]])
         )
         return
 
     if hapus_lomba(lomba_id):
-        safe_judul = escape_markdown(lomba[1], version=1)
-        await update.message.reply_text(
-            f"✅ *Lomba berhasil dibatalkan!*\n\n"
-            f"📌 *Judul:* {safe_judul}\n"
-            f"🆔 *ID:* {lomba_id}",
-            parse_mode="Markdown"
+        judul = escape_markdown(lomba[1], version=1)
+        await query.edit_message_text(
+            f"✅ *Lomba dihapus:* {judul}",
+            parse_mode="MarkdownV2",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Kembali", callback_data="menu_list")]])
         )
-        logger.info(f"Lomba dibatalkan: {lomba[1]} (ID: {lomba_id})")
+        logger.info(f"Lomba dihapus: {lomba[1]} (ID: {lomba_id})")
     else:
-        await update.message.reply_text(
-            "❌ *Gagal membatalkan lomba!*\n"
-            "Terjadi kesalahan pada server. Silakan coba lagi."
+        await query.edit_message_text(
+            "❌ *Gagal menghapus lomba!*",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Kembali", callback_data="menu_list")]])
         )
 
 
-# --- FUNGSI COMMAND HANDLER UNTUK ROLE ---
+async def show_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    user_id = query.from_user.id
+    role = get_role(user_id)
 
-async def daftar(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_authorized(update.effective_user.username):
-        await unauthorized_reply(update)
-        return
-    if not context.args:
-        role_list = "\n".join(f"• `{k}` — {v}" for k, v in ROLE_DISPLAY.items())
-        await update.message.reply_text(
-            f"❌ *Format salah!*\n\n"
-            f"Gunakan: `/daftar [role]`\n\n"
-            f"Role tersedia:\n{role_list}\n\n"
-            f"Contoh: `/daftar data-mle`",
-            parse_mode="Markdown"
-        )
-        return
-
-    role = context.args[0].lower()
-    user_id = update.effective_user.id
-    username = update.effective_user.username or update.effective_user.full_name
-
-    success, message = daftar_user(user_id, username, role)
-    await update.message.reply_text(message, parse_mode="Markdown")
-
-
-async def ubahrole(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_authorized(update.effective_user.username):
-        await unauthorized_reply(update)
-        return
-    if not context.args:
-        role_list = "\n".join(f"• `{k}` — {v}" for k, v in ROLE_DISPLAY.items())
-        await update.message.reply_text(
-            f"❌ *Format salah!*\n\n"
-            f"Gunakan: `/ubahrole [role]`\n\n"
-            f"Role tersedia:\n{role_list}\n\n"
-            f"Contoh: `/ubahrole fullstack-developer`",
-            parse_mode="Markdown"
-        )
-        return
-
-    role = context.args[0].lower()
-    user_id = update.effective_user.id
-
-    success, message = ubah_role(user_id, role)
-    await update.message.reply_text(message, parse_mode="Markdown")
-
-
-async def role(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_authorized(update.effective_user.username):
-        await unauthorized_reply(update)
-        return
-    user_id = update.effective_user.id
-    role_user = get_role(user_id)
-
-    if role_user:
-        await update.message.reply_text(
-            f"🧑‍💻 *Role Anda:* {ROLE_DISPLAY.get(role_user, role_user)}\n\n"
-            f"Gunakan `/ubahrole [role]` jika ingin mengganti.",
-            parse_mode="Markdown"
-        )
+    if role:
+        msg = f"🧑‍💻 *Role Kamu:* {ROLE_DISPLAY.get(role, role)}"
+        keyboard = [
+            [InlineKeyboardButton("🔄 Ganti Role", callback_data="menu_gantirole")],
+            [InlineKeyboardButton("🔙 Kembali", callback_data="menu_back")],
+        ]
     else:
-        role_list = "\n".join(f"• `{k}` — {v}" for k, v in ROLE_DISPLAY.items())
-        await update.message.reply_text(
-            "❌ *Anda belum terdaftar!*\n\n"
-            f"Gunakan `/daftar [role]` untuk mendaftar.\n\n"
-            f"Role tersedia:\n{role_list}",
-            parse_mode="Markdown"
-        )
+        msg = "❌ *Belum terdaftar*"
+        keyboard = [[InlineKeyboardButton("🔙 Kembali", callback_data="menu_back")]]
+
+    await query.edit_message_text(msg, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
 
 
-async def list_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_authorized(update.effective_user.username):
-        await unauthorized_reply(update)
-        return
+async def handle_gantirole(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    keyboard = []
+    for r in ROLES:
+        keyboard.append([InlineKeyboardButton(
+            ROLE_DISPLAY.get(r, r), callback_data=f"ganti_{r}"
+        )])
+    keyboard.append([InlineKeyboardButton("🔙 Kembali", callback_data="menu_back")])
+
+    await query.edit_message_text(
+        "🔄 *Pilih role baru:*",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+
+async def handle_pilih_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+    role = data.replace("ganti_", "")
+    user_id = query.from_user.id
+
+    if ubah_role(user_id, role):
+        msg = f"✅ *Role berhasil diganti!*\nSekarang kamu *{ROLE_DISPLAY.get(role, role)}* ⚡"
+    else:
+        msg = "❌ *Gagal mengganti role*"
+
+    keyboard = [[InlineKeyboardButton("🔙 Kembali", callback_data="menu_back")]]
+    await query.edit_message_text(msg, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
+
+
+async def handle_list_role_anggota(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # for the menu_anggota callback - handled by menu_callback which calls show_anggota
+    pass
+
+
+async def show_anggota(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
     users = get_all_users()
-
-    if not users:
-        await update.message.reply_text(
-            "📭 *Belum ada anggota yang terdaftar.*\n\n"
-            "Gunakan `/daftar [role]` untuk mendaftar.",
-            parse_mode="Markdown"
-        )
-        return
 
     grouped = {}
     for user_id, username, role in users:
         name = TEAM_MEMBERS.get(username, {}).get("name", username)
         grouped.setdefault(role, []).append(name)
 
-    message = "👥 *Daftar Anggota Tim Oryphem*\n\n"
+    msg = "👥 *Anggota Tim Oryphem*\n\n"
     for r in ROLES:
         if r in grouped:
-            message += f"*{ROLE_DISPLAY.get(r, r)}:* {', '.join(grouped[r])}\n"
+            msg += f"*{ROLE_DISPLAY.get(r, r)}:* {', '.join(grouped[r])}\n"
         else:
-            message += f"*{ROLE_DISPLAY.get(r, r)}:* (kosong)\n"
+            msg += f"*{ROLE_DISPLAY.get(r, r)}:* (kosong)\n"
 
-    await update.message.reply_text(message, parse_mode="Markdown")
+    keyboard = [[InlineKeyboardButton("🔙 Kembali", callback_data="menu_back")]]
+    await query.edit_message_text(msg, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
 
 
-# --- CALLBACK HANDLER UNTUK TOMBOL ROLE ---
+async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    msg = (
+        "📖 *Panduan Bot Oryphem*\n\n"
+        "📋 *Tambah Lomba*\n"
+        "Menu → Tambah Lomba → ikuti langkah\n\n"
+        "👤 *Role*\n"
+        "Menu → Role Saya / Ganti Role\n\n"
+        "⏰ *Pengingat Otomatis*\n"
+        "• H-7 jam 08:00 WIB\n"
+        "• H-1 jam 08:00 WIB\n\n"
+        "🧹 *Pembersihan Otomatis*\n"
+        "Lomba dihapus setelah H-1 lewat"
+    )
+    keyboard = [[InlineKeyboardButton("🔙 Kembali", callback_data="menu_back")]]
+    await query.edit_message_text(msg, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
 
-async def role_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+async def show_konfirmasi(query, context):
+    judul = context.user_data.get("judul", "?")
+    link = context.user_data.get("link", "?")
+    h7 = context.user_data.get("h7", "?")
+    h1 = context.user_data.get("h1", "?")
+    safe_judul = escape_markdown(judul, version=1)
+    safe_link = link.replace(")", "%29")
+
+    msg = (
+        f"📌 *Judul:* {safe_judul}\n"
+        f"🔗 *Link:* {safe_link}\n"
+        f"📅 *H-7:* {h7}\n"
+        f"📅 *H-1:* {h1}\n\n"
+        "✅ *Simpan lomba ini?*"
+    )
+    keyboard = [
+        [InlineKeyboardButton("✅ Simpan", callback_data="konfirmasi_simpan")],
+        [InlineKeyboardButton("🔄 Ulang", callback_data="menu_tambah")],
+        [InlineKeyboardButton("❌ Batal", callback_data="menu_back")],
+    ]
+    await query.edit_message_text(msg, parse_mode="Markdown",
+                                  reply_markup=InlineKeyboardMarkup(keyboard),
+                                  disable_web_page_preview=True)
+    context.user_data["state"] = "KONFIRMASI"
+
+
+async def handle_konfirmasi(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+    data = query.data
 
-    if not is_authorized(query.from_user.username):
-        await query.edit_message_text("⛔ *Akses Ditolak!*", parse_mode="Markdown")
+    if data == "konfirmasi_simpan":
+        judul = context.user_data.get("judul", "?")
+        link = context.user_data.get("link", "?")
+        h7 = context.user_data.get("h7", "?")
+        h1 = context.user_data.get("h1", "?")
+
+        try:
+            lomba_id = tambah_lomba(judul, link, h7, h1)
+            await query.edit_message_text(
+                f"✅ *Lomba berhasil ditambahkan!* 🆔 {lomba_id}",
+                parse_mode="Markdown",
+                reply_markup=main_menu_keyboard()
+            )
+            logger.info(f"Lomba ditambahkan: {judul} (ID: {lomba_id})")
+        except Exception as e:
+            logger.error(f"Error saat menambah lomba: {e}")
+            await query.edit_message_text(
+                "❌ *Gagal menambahkan lomba!*",
+                parse_mode="Markdown",
+                reply_markup=main_menu_keyboard()
+            )
+        context.user_data.clear()
+
+    return
+
+
+# --- CALLBACK DISPATCHER ---
+
+async def callback_dispatcher(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    data = query.data
+
+    if data.startswith("menu_"):
+        result = await menu_callback(update, context)
+        if isinstance(result, str):
+            context.user_data["state"] = result
         return
 
-    role = query.data.replace("role_", "")
-    user_id = query.from_user.id
-    username = query.from_user.username or query.from_user.full_name
+    if data.startswith("hapus_"):
+        await handle_hapus(update, context)
+        return
 
-    success, message = daftar_user(user_id, username, role)
-    if success:
-        await query.edit_message_text(
-            f"✅ *Selamat! Kamu terdaftar sebagai* {ROLE_DISPLAY.get(role, role)}! ⚡\n\n"
-            "Gunakan `/role` untuk cek role kamu.\n"
-            "Gunakan `/help` untuk melihat semua perintah.",
-            parse_mode="Markdown"
-        )
-    else:
-        await query.edit_message_text(message, parse_mode="Markdown")
+    if data.startswith("ganti_"):
+        await handle_pilih_role(update, context)
+        return
+
+    if data.startswith("h7_") or data.startswith("h1_"):
+        await handle_calendar(update, context)
+        return
+
+    if data.startswith("konfirmasi_"):
+        await handle_konfirmasi(update, context)
+        return
+
+    if data == "cal_ignore":
+        await query.answer()
+        return
+
+    await query.answer()
 
 
 # --- FUNGSI JOB (TUGAS OTOMATIS) ---
@@ -782,8 +874,7 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.error(f"Update {update_id} caused error {context.error}")
     if update and update.effective_message:
         await update.effective_message.reply_text(
-            "❌ *Terjadi kesalahan!*\n"
-            "Silakan coba lagi nanti atau hubungi admin.",
+            "❌ *Terjadi kesalahan!*\nSilakan coba lagi nanti.",
             parse_mode="Markdown"
         )
 
@@ -800,7 +891,6 @@ def main():
     )
 
     job_queue = application.job_queue
-
     if job_queue:
         job_queue.run_daily(
             daily_reminder,
@@ -809,27 +899,15 @@ def main():
             name="daily_reminder"
         )
         logger.info("Daily reminder dijadwalkan pada jam 08:00 WIB setiap hari")
-
-        job_queue.run_once(
-            startup_cleanup,
-            when=10,
-            name="startup_cleanup"
-        )
+        job_queue.run_once(startup_cleanup, when=10, name="startup_cleanup")
     else:
         logger.warning("JobQueue tidak tersedia!")
 
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("ikut", ikut))
-    application.add_handler(CommandHandler("list", list_lomba))
-    application.add_handler(CommandHandler("batal", batal))
+    application.add_handler(CommandHandler("help", start))
 
-    application.add_handler(CommandHandler("daftar", daftar))
-    application.add_handler(CommandHandler("ubahrole", ubahrole))
-    application.add_handler(CommandHandler("role", role))
-    application.add_handler(CommandHandler("listrole", list_role))
-
-    application.add_handler(CallbackQueryHandler(role_callback, pattern="^role_"))
+    application.add_handler(CallbackQueryHandler(callback_dispatcher))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_conversation_message))
 
     application.add_error_handler(error_handler)
 
