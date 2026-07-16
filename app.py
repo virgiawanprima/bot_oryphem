@@ -35,7 +35,7 @@ if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN tidak ditemukan di environment variables!")
 
 DATABASE = "lomba.db"
-WIB = ZoneInfo("Asia/Jakarta")
+WITA = ZoneInfo("Asia/Makassar")
 
 _raw_chat_id = os.environ.get("CHAT_ID")
 if _raw_chat_id:
@@ -115,7 +115,7 @@ def tambah_lomba(judul, link, tanggal_buka, tanggal_tutup):
     conn = sqlite3.connect(DATABASE)
     try:
         cursor = conn.cursor()
-        now = datetime.now(WIB).isoformat()
+        now = datetime.now(WITA).isoformat()
         cursor.execute(
             "INSERT INTO lomba (judul, link, tanggal_buka, tanggal_tutup, created_at) VALUES (?, ?, ?, ?, ?)",
             (judul, link, tanggal_buka, tanggal_tutup, now)
@@ -170,7 +170,7 @@ def hapus_lomba_otomatis():
     conn = sqlite3.connect(DATABASE)
     try:
         cursor = conn.cursor()
-        today = datetime.now(WIB).date().isoformat()
+        today = datetime.now(WITA).date().isoformat()
         cursor.execute("DELETE FROM lomba WHERE tanggal_tutup < ?", (today,))
         deleted = cursor.rowcount
         conn.commit()
@@ -180,7 +180,7 @@ def hapus_lomba_otomatis():
 
 
 def get_lomba_yang_perlu_diingatkan():
-    today = datetime.now(WIB).date()
+    today = datetime.now(WITA).date()
     conn = sqlite3.connect(DATABASE)
     try:
         cursor = conn.cursor()
@@ -250,7 +250,7 @@ def daftar_user(user_id, username, role):
         existing = cursor.fetchone()
         if existing:
             return False
-        now = datetime.now(WIB).isoformat()
+        now = datetime.now(WITA).isoformat()
         cursor.execute(
             "INSERT INTO users (user_id, username, role, registered_at) VALUES (?, ?, ?, ?)",
             (user_id, username, role, now)
@@ -300,7 +300,7 @@ MONTH_NAMES = [
 DAY_NAMES = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"]
 
 def build_calendar(year, month, prefix="cal"):
-    today = datetime.now(WIB).date()
+    today = datetime.now(WITA).date()
     cal = calendar.Calendar()
 
     keyboard = [
@@ -332,7 +332,7 @@ def build_calendar(year, month, prefix="cal"):
 
 
 def format_date_relative(date_str):
-    today = datetime.now(WIB).date()
+    today = datetime.now(WITA).date()
     try:
         d = datetime.strptime(date_str, "%Y-%m-%d").date()
         delta = (d - today).days
@@ -482,7 +482,7 @@ async def handle_conversation_message(update: Update, context: ContextTypes.DEFA
             )
             return
         context.user_data["link"] = text
-        now = datetime.now(WIB)
+        now = datetime.now(WITA)
         await update.message.reply_text(
             "📅 *Pilih tanggal pendaftaran dibuka:*",
             parse_mode="Markdown",
@@ -503,7 +503,7 @@ async def handle_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     parts = data.split("_")
     prefix = parts[0]
 
-    now = datetime.now(WIB)
+    now = datetime.now(WITA)
 
     if data == f"{prefix}_today":
         selected = now.date().isoformat()
@@ -545,7 +545,7 @@ async def handle_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if prefix == "buka":
         context.user_data["buka"] = selected
-        now = datetime.now(WIB)
+        now = datetime.now(WITA)
         await query.edit_message_text(
             "📅 *Pilih tanggal tutup pendaftaran:*",
             parse_mode="Markdown",
@@ -555,7 +555,7 @@ async def handle_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif prefix == "tutup":
         buka = context.user_data.get("buka")
         if buka and selected <= buka:
-            now = datetime.now(WIB)
+            now = datetime.now(WITA)
             await query.edit_message_text(
                 "❌ *Tanggal tutup harus setelah tanggal buka!*\n\nPilih tanggal yang lebih besar.",
                 parse_mode="Markdown",
@@ -675,9 +675,9 @@ async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "👤 *Role*\n"
         "Menu → Role Saya\n\n"
         "⏰ *Pengingat Otomatis*\n"
-        "• H-7 jam 08:00 WIB\n"
-        "• H-3 jam 08:00 WIB\n"
-        "• H-1 jam 08:00 WIB\n\n"
+        "• H-7 jam 09:00 WITA\n"
+        "• H-3 jam 09:00 WITA\n"
+        "• H-1 jam 09:00 WITA\n\n"
         "🧹 *Pembersihan Otomatis*\n"
         "Lomba dihapus setelah deadline lewat"
     )
@@ -887,11 +887,11 @@ def main():
     if job_queue:
         job_queue.run_daily(
             daily_reminder,
-            time=time(8, 0, tzinfo=WIB),
+            time=time(9, 0, tzinfo=WITA),
             days=tuple(range(7)),
             name="daily_reminder"
         )
-        logger.info("Daily reminder dijadwalkan pada jam 08:00 WIB setiap hari")
+        logger.info("Daily reminder dijadwalkan pada jam 09:00 WITA setiap hari")
         job_queue.run_once(startup_cleanup, when=10, name="startup_cleanup")
     else:
         logger.warning("JobQueue tidak tersedia!")

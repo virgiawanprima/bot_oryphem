@@ -11,7 +11,7 @@ Dibangun dengan [python-telegram-bot](https://github.com/python-telegram-bot/pyt
 |-------|--------|
 | **Role Registration** | Daftar anggota tim via tombol interaktif (`/start`) atau command `/daftar` |
 | **Manajemen Lomba** | Tambah, lihat, dan batalkan lomba yang diikuti |
-| **Pengingat Otomatis** | Notifikasi H-7 dan H-1 setiap jam 08:00 WIB |
+| **Pengingat Otomatis** | Notifikasi H-7, H-3, H-1 setiap jam 09:00 WITA |
 | **Pembersihan Otomatis** | Lomba otomatis dihapus setelah H-1 lewat |
 | **Role Management** | Lihat role, ubah role, dan daftar semua anggota tim |
 
