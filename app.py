@@ -334,8 +334,7 @@ Kamu adalah anggota Oryphem sebagai *{ROLE_DISPLAY.get(role, role)}* ⚡
         await update.message.reply_text(msg, parse_mode="Markdown")
         return
 
-    display_name = user.full_name or username
-    daftar_user(user_id, display_name, role)
+    daftar_user(user_id, username, role)
 
     msg = f"""
 🚀 *Halo {name}!*
