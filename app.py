@@ -663,7 +663,8 @@ async def list_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     grouped = {}
     for user_id, username, role in users:
-        grouped.setdefault(role, []).append(username)
+        name = TEAM_MEMBERS.get(username, {}).get("name", username)
+        grouped.setdefault(role, []).append(name)
 
     message = "👥 *Daftar Anggota Tim Oryphem*\n\n"
     for r in ROLES:
