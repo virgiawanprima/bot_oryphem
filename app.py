@@ -311,7 +311,6 @@ def build_calendar(year, month, prefix="cal"):
             if day == 0:
                 row.append(InlineKeyboardButton(" ", callback_data="cal_ignore"))
             else:
-                date_ = " " if day == today.day and month == today.month and year == today.year else str(day)
                 row.append(InlineKeyboardButton(str(day), callback_data=f"{prefix}_day_{year}_{month}_{day}"))
         keyboard.append(row)
 
@@ -563,14 +562,14 @@ async def show_list_lomba(update: Update, context: ContextTypes.DEFAULT_TYPE):
         l_id, judul, link, tgl_h7, tgl_h1 = l
         safe_judul = escape_markdown(judul, version=1)
         msg += f"🆔 *{l_id}* — {safe_judul}\n"
-        msg += f"  H\\-7: {format_date_relative(tgl_h7)}\n"
-        msg += f"  H\\-1: {format_date_relative(tgl_h1)}\n\n"
+        msg += f"  H-7: {format_date_relative(tgl_h7)}\n"
+        msg += f"  H-1: {format_date_relative(tgl_h1)}\n\n"
         keyboard.append([InlineKeyboardButton(f"❌ Hapus #{l_id}", callback_data=f"hapus_{l_id}")])
 
     keyboard.append([InlineKeyboardButton("➕ Tambah Baru", callback_data="menu_tambah")])
     keyboard.append([InlineKeyboardButton("🔙 Kembali", callback_data="menu_back")])
 
-    await query.edit_message_text(msg, parse_mode="MarkdownV2",
+    await query.edit_message_text(msg, parse_mode="Markdown",
                                    reply_markup=InlineKeyboardMarkup(keyboard),
                                    disable_web_page_preview=True)
 
@@ -594,7 +593,7 @@ async def handle_hapus(update: Update, context: ContextTypes.DEFAULT_TYPE):
         judul = escape_markdown(lomba[1], version=1)
         await query.edit_message_text(
             f"✅ *Lomba dihapus:* {judul}",
-            parse_mode="MarkdownV2",
+            parse_mode="Markdown",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Kembali", callback_data="menu_list")]])
         )
         logger.info(f"Lomba dihapus: {lomba[1]} (ID: {lomba_id})")
@@ -618,9 +617,6 @@ async def show_role(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     keyboard = [[InlineKeyboardButton("🔙 Kembali", callback_data="menu_back")]]
     await query.edit_message_text(msg, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
-
-
-
 
 
 async def show_anggota(update: Update, context: ContextTypes.DEFAULT_TYPE):
