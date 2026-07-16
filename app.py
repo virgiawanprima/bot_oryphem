@@ -84,13 +84,14 @@ ALLOWED_USERNAMES = set(TEAM_MEMBERS.keys())
 def init_db():
     conn = sqlite3.connect(DATABASE)
     try:
+        conn.execute("DROP TABLE IF EXISTS lomba")
         conn.execute("""
-            CREATE TABLE IF NOT EXISTS lomba (
+            CREATE TABLE lomba (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 judul TEXT NOT NULL,
                 link TEXT NOT NULL,
-                tanggal_h7 TEXT NOT NULL,
-                tanggal_h1 TEXT NOT NULL,
+                tanggal_buka TEXT NOT NULL,
+                tanggal_tutup TEXT NOT NULL,
                 created_at TEXT NOT NULL
             )
         """)
@@ -110,14 +111,14 @@ def init_db():
     logger.info("Database initialized")
 
 
-def tambah_lomba(judul, link, tanggal_h7, tanggal_h1):
+def tambah_lomba(judul, link, tanggal_buka, tanggal_tutup):
     conn = sqlite3.connect(DATABASE)
     try:
         cursor = conn.cursor()
         now = datetime.now(WIB).isoformat()
         cursor.execute(
-            "INSERT INTO lomba (judul, link, tanggal_h7, tanggal_h1, created_at) VALUES (?, ?, ?, ?, ?)",
-            (judul, link, tanggal_h7, tanggal_h1, now)
+            "INSERT INTO lomba (judul, link, tanggal_buka, tanggal_tutup, created_at) VALUES (?, ?, ?, ?, ?)",
+            (judul, link, tanggal_buka, tanggal_tutup, now)
         )
         lomba_id = cursor.lastrowid
         conn.commit()
@@ -143,7 +144,7 @@ def get_all_lomba():
     try:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT id, judul, link, tanggal_h7, tanggal_h1 FROM lomba ORDER BY tanggal_h7 ASC"
+            "SELECT id, judul, link, tanggal_buka, tanggal_tutup FROM lomba ORDER BY tanggal_buka ASC"
         )
         rows = cursor.fetchall()
         return rows
@@ -156,7 +157,7 @@ def get_lomba_by_id(lomba_id):
     try:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT id, judul, link, tanggal_h7, tanggal_h1 FROM lomba WHERE id = ?",
+            "SELECT id, judul, link, tanggal_buka, tanggal_tutup FROM lomba WHERE id = ?",
             (lomba_id,)
         )
         row = cursor.fetchone()
@@ -170,7 +171,7 @@ def hapus_lomba_otomatis():
     try:
         cursor = conn.cursor()
         today = datetime.now(WIB).date().isoformat()
-        cursor.execute("DELETE FROM lomba WHERE tanggal_h1 < ?", (today,))
+        cursor.execute("DELETE FROM lomba WHERE tanggal_tutup < ?", (today,))
         deleted = cursor.rowcount
         conn.commit()
         return deleted
@@ -179,16 +180,22 @@ def hapus_lomba_otomatis():
 
 
 def get_lomba_yang_perlu_diingatkan():
+    today = datetime.now(WIB).date()
     conn = sqlite3.connect(DATABASE)
     try:
         cursor = conn.cursor()
-        today = datetime.now(WIB).date().isoformat()
-        cursor.execute(
-            "SELECT id, judul, link, tanggal_h7, tanggal_h1 FROM lomba WHERE tanggal_h7 = ? OR tanggal_h1 = ?",
-            (today, today)
-        )
+        cursor.execute("SELECT id, judul, link, tanggal_tutup FROM lomba")
         rows = cursor.fetchall()
-        return rows
+        results = []
+        for l_id, judul, link, tgl_tutup in rows:
+            try:
+                tutup = datetime.strptime(tgl_tutup, "%Y-%m-%d").date()
+                days_left = (tutup - today).days
+                if days_left in (7, 3, 1):
+                    results.append((l_id, judul, link, tgl_tutup, days_left))
+            except ValueError:
+                continue
+        return results
     finally:
         conn.close()
 
@@ -477,11 +484,11 @@ async def handle_conversation_message(update: Update, context: ContextTypes.DEFA
         context.user_data["link"] = text
         now = datetime.now(WIB)
         await update.message.reply_text(
-            "📅 *Pilih tanggal H-7:*",
+            "📅 *Pilih tanggal pendaftaran dibuka:*",
             parse_mode="Markdown",
-            reply_markup=build_calendar(now.year, now.month, prefix="h7")
+            reply_markup=build_calendar(now.year, now.month, prefix="buka")
         )
-        context.user_data["state"] = "H7"
+        context.user_data["state"] = "BUKA"
 
 
 # --- CALLBACK HANDLERS ---
@@ -510,8 +517,9 @@ async def handle_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
             y, m = y - 1, 12
         else:
             m -= 1
+        teks = {"buka": "📅 *Pilih tanggal pendaftaran dibuka:*", "tutup": "📅 *Pilih tanggal tutup pendaftaran:*"}
         await query.edit_message_text(
-            "📅 *Pilih tanggal:*" if prefix == "h7" else "📅 *Pilih tanggal H-1:*",
+            teks.get(prefix, "📅 *Pilih tanggal:*"),
             parse_mode="Markdown",
             reply_markup=build_calendar(y, m, prefix=prefix)
         )
@@ -522,8 +530,9 @@ async def handle_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
             y, m = y + 1, 1
         else:
             m += 1
+        teks = {"buka": "📅 *Pilih tanggal pendaftaran dibuka:*", "tutup": "📅 *Pilih tanggal tutup pendaftaran:*"}
         await query.edit_message_text(
-            "📅 *Pilih tanggal:*" if prefix == "h7" else "📅 *Pilih tanggal H-1:*",
+            teks.get(prefix, "📅 *Pilih tanggal:*"),
             parse_mode="Markdown",
             reply_markup=build_calendar(y, m, prefix=prefix)
         )
@@ -534,26 +543,26 @@ async def handle_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         return
 
-    if prefix == "h7":
-        context.user_data["h7"] = selected
+    if prefix == "buka":
+        context.user_data["buka"] = selected
         now = datetime.now(WIB)
         await query.edit_message_text(
-            "📅 *Pilih tanggal H-1:*",
+            "📅 *Pilih tanggal tutup pendaftaran:*",
             parse_mode="Markdown",
-            reply_markup=build_calendar(now.year, now.month, prefix="h1")
+            reply_markup=build_calendar(now.year, now.month, prefix="tutup")
         )
-        context.user_data["state"] = "H1"
-    elif prefix == "h1":
-        h7 = context.user_data.get("h7")
-        if h7 and selected <= h7:
+        context.user_data["state"] = "TUTUP"
+    elif prefix == "tutup":
+        buka = context.user_data.get("buka")
+        if buka and selected <= buka:
             now = datetime.now(WIB)
             await query.edit_message_text(
-                "❌ *H-1 harus setelah H-7!*\n\nPilih tanggal yang lebih besar.",
+                "❌ *Tanggal tutup harus setelah tanggal buka!*\n\nPilih tanggal yang lebih besar.",
                 parse_mode="Markdown",
-                reply_markup=build_calendar(now.year, now.month, prefix="h1")
+                reply_markup=build_calendar(now.year, now.month, prefix="tutup")
             )
             return
-        context.user_data["h1"] = selected
+        context.user_data["tutup"] = selected
         await show_konfirmasi(query, context)
 
 
@@ -574,11 +583,11 @@ async def show_list_lomba(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = "📋 *Daftar Lomba:*\n\n"
     keyboard = []
     for l in lomba_list:
-        l_id, judul, link, tgl_h7, tgl_h1 = l
+        l_id, judul, link, tgl_buka, tgl_tutup = l
         safe_judul = escape_markdown(judul, version=1)
         msg += f"🆔 *{l_id}* — {safe_judul}\n"
-        msg += f"  H-7: {format_date_relative(tgl_h7)}\n"
-        msg += f"  H-1: {format_date_relative(tgl_h1)}\n\n"
+        msg += f"  Buka: {format_date_relative(tgl_buka)}\n"
+        msg += f"  Tutup: {format_date_relative(tgl_tutup)}\n\n"
         keyboard.append([InlineKeyboardButton(f"❌ Hapus #{l_id}", callback_data=f"hapus_{l_id}")])
 
     keyboard.append([InlineKeyboardButton("➕ Tambah Baru", callback_data="menu_tambah")])
@@ -667,9 +676,10 @@ async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Menu → Role Saya\n\n"
         "⏰ *Pengingat Otomatis*\n"
         "• H-7 jam 08:00 WIB\n"
+        "• H-3 jam 08:00 WIB\n"
         "• H-1 jam 08:00 WIB\n\n"
         "🧹 *Pembersihan Otomatis*\n"
-        "Lomba dihapus setelah H-1 lewat"
+        "Lomba dihapus setelah deadline lewat"
     )
     keyboard = [[InlineKeyboardButton("🔙 Kembali", callback_data="menu_back")]]
     await query.edit_message_text(msg, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
@@ -678,16 +688,16 @@ async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def show_konfirmasi(query, context):
     judul = context.user_data.get("judul", "?")
     link = context.user_data.get("link", "?")
-    h7 = context.user_data.get("h7", "?")
-    h1 = context.user_data.get("h1", "?")
+    buka = context.user_data.get("buka", "?")
+    tutup = context.user_data.get("tutup", "?")
     safe_judul = escape_markdown(judul, version=1)
     safe_link = link.replace(")", "%29")
 
     msg = (
         f"📌 *Judul:* {safe_judul}\n"
         f"🔗 *Link:* {safe_link}\n"
-        f"📅 *H-7:* {h7}\n"
-        f"📅 *H-1:* {h1}\n\n"
+        f"📅 *Tanggal Buka:* {buka}\n"
+        f"📅 *Tanggal Tutup:* {tutup}\n\n"
         "✅ *Simpan lomba ini?*"
     )
     keyboard = [
@@ -712,11 +722,11 @@ async def handle_konfirmasi(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data == "konfirmasi_simpan":
         judul = context.user_data.get("judul", "?")
         link = context.user_data.get("link", "?")
-        h7 = context.user_data.get("h7", "?")
-        h1 = context.user_data.get("h1", "?")
+        buka = context.user_data.get("buka", "?")
+        tutup = context.user_data.get("tutup", "?")
 
         try:
-            lomba_id = tambah_lomba(judul, link, h7, h1)
+            lomba_id = tambah_lomba(judul, link, buka, tutup)
             await query.edit_message_text(
                 f"✅ *Lomba berhasil ditambahkan!* 🆔 {lomba_id}",
                 parse_mode="Markdown",
@@ -749,7 +759,7 @@ async def callback_dispatcher(update: Update, context: ContextTypes.DEFAULT_TYPE
         await handle_hapus(update, context)
         return
 
-    if data.startswith("h7_") or data.startswith("h1_"):
+    if data.startswith("buka_") or data.startswith("tutup_"):
         await handle_calendar(update, context)
         return
 
@@ -779,20 +789,18 @@ async def daily_reminder(context: ContextTypes.DEFAULT_TYPE):
         logger.info("Tidak ada lomba yang perlu diingatkan hari ini")
         return
 
-    today = datetime.now(WIB).date().isoformat()
-
     for l in lomba_list:
-        l_id, judul, link, tgl_h7, tgl_h1 = l
+        l_id, judul, link, tgl_tutup, days_left = l
         safe_judul = escape_markdown(judul, version=1)
         safe_link = link.replace(")", "%29")
 
-        if tgl_h7 == today:
+        if days_left == 7:
             pesan = f"""
 🚨 *PENGINGAT H-7!*
 
 📌 *{safe_judul}*
 🔗 [Link Lomba]({safe_link})
-📅 H-7: {tgl_h7}
+📅 Deadline: {tgl_tutup}
 
 ⚠️ *Persiapan dokumen dan konsep mulai sekarang!*
 Jangan sampai ketinggalan!
@@ -800,15 +808,29 @@ Jangan sampai ketinggalan!
 ---
 Tim Oryphem ⚡
 """
-        elif tgl_h1 == today:
+        elif days_left == 3:
+            pesan = f"""
+🚨 *PENGINGAT H-3!*
+
+📌 *{safe_judul}*
+🔗 [Link Lomba]({safe_link})
+📅 Deadline: {tgl_tutup}
+
+⚡ *Waktu semakin dekat!*
+Cek progress dan kumpulkan bahan.
+
+---
+Tim Oryphem ⚡
+"""
+        elif days_left == 1:
             pesan = f"""
 🚨 *PENGINGAT H-1!*
 
 📌 *{safe_judul}*
 🔗 [Link Lomba]({safe_link})
-📅 H-1: {tgl_h1}
+📅 Deadline: {tgl_tutup}
 
-🔥 *Besok hari-H!*
+🔥 *Besok terakhir!*
 Cek kembali:
 ✅ Berkas pendaftaran
 ✅ Kodingan dan testing
