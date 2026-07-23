@@ -16,6 +16,7 @@ Dibangun dengan [python-telegram-bot](https://github.com/python-telegram-bot/pyt
 | **Tambah Lomba** | Input judul, link, tanggal buka & tutup via kalender tap |
 | **Pengingat Otomatis** | H-7, H-3, H-1 otomatis dari tanggal tutup (jam 09:00 WITA) |
 | **Pembersihan Otomatis** | Lomba dihapus setelah deadline lewat |
+| **Backup Database** | Backup otomatis tiap hari jam 09:00 WITA ke folder `backups/` |
 | **Role Permanent** | Role tidak bisa diganti — sesuai mapping tim |
 
 ---
@@ -133,10 +134,12 @@ nohup .venv/bin/python3 app.py > bot.log 2>&1 &
 
 ```
 bot_oryphem/
-├── app.py             # Bot utama (900+ baris)
+├── app.py             # Bot utama (~1000 baris)
 ├── run.sh             # Script jalanin bot
 ├── requirements.txt   # Dependencies
 ├── .env               # Token & config (tidak di-commit)
 ├── .gitignore         # File yang diabaikan git
-└── README.md          # Dokumentasi ini
+├── README.md          # Dokumentasi ini
+├── backups/           # Backup database otomatis (tidak di-commit)
+└── lomba.db           # Database SQLite (tidak di-commit)
 ```
